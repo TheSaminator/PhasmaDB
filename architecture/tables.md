@@ -12,6 +12,12 @@ Tables use the following information:
   * Multiply index: uses RSA cipher
 * Rest of data: uses AES cipher
 
+## Communication
+
+Everything will be encrypted in transit and in storage
+on the server. The client library will encrypt data **before**
+sending it, and decrypt data after receiving it.
+
 ## Operations
 
 ### Create table
@@ -75,10 +81,13 @@ Update contains a filter and a list of modifications
   * NOT of filter
 * Modifications:
   * Set non-indexed data to value
+    * Value will be encrypted before sending by client library
     * Uses AES
   * Add to value in column w/ add index
+    * Addend will be encrypted before sending by client library
     * Uses Paillier
   * Multiply value in column w/ multiply index
+    * Multiplicand will be encrypted before sending by client library
     * Uses RSA
 
 #### Response

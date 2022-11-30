@@ -45,6 +45,12 @@ async def main():
 				'officer_name': "Marcus Colimarnius Iacomus"
 			}),
 			'row 3': phasmadb.PhasmaDBDataRow({
+				'officer_number': 2247,
+				'officer_rank': 3,
+			}, {
+				'officer_name': "Legatus Lanius Trollator"
+			}),
+			'row 4': phasmadb.PhasmaDBDataRow({
 				'officer_number': 1377,
 				'officer_rank': 1,
 			}, {
@@ -54,7 +60,7 @@ async def main():
 		print("Done inserting data")
 		
 		query_result = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
-			select=phasmadb.Column('officer_rank') > 1,
+			select=phasmadb.Column('officer_rank') > 2,
 			sort=[('officer_number', 'desc')]
 		), ['officer_number', 'officer_rank'], on_error=print_err)
 		if query_result:

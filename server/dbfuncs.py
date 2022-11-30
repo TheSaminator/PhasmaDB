@@ -1,11 +1,10 @@
 import asyncio
 import re
 from enum import IntEnum
-from typing import Any, NamedTuple, Generic, TypeVar, Optional, Union, Literal, Dict, List
+from typing import Any, NamedTuple, TypeVar, Optional, Union, Literal, Dict, List
 
 import nanoid
 import pymongo
-from aiohttp import web
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 

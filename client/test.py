@@ -1,6 +1,5 @@
 import asyncio
 import os.path
-from typing import Optional
 
 import aiohttp
 

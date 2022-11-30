@@ -2,15 +2,18 @@ import asyncio
 import base64
 import hashlib
 import json
+import os
 import random
-from typing import NamedTuple, Optional, Any, Literal, Dict
 from asyncio import Queue
+from typing import NamedTuple, Optional, Any, Literal, Dict, Callable
 
 import aiohttp
-import phe as paillier
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.asymmetric import rsa, padding as rsa_padding
+from cryptography.hazmat.primitives import padding as aes_padding
+from cryptography.hazmat.primitives.ciphers import Cipher
 from cryptography.hazmat.primitives.ciphers.algorithms import AES
-from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, PublicFormat, NoEncryption, load_pem_private_key, load_pem_public_key
+from cryptography.hazmat.primitives.ciphers.modes import CBC
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from pyope.ope import OPE, ValueRange
 
 
@@ -28,55 +31,31 @@ class PhasmaDBLoginCredential(NamedTuple):
 
 
 class PhasmaDBLocalKeyring(NamedTuple):
-	rsa_public_key: rsa.RSAPublicKey
-	rsa_private_key: rsa.RSAPrivateKey
-	paillier_public_key: paillier.PaillierPublicKey
-	paillier_private_key: paillier.PaillierPrivateKey
 	aes_key: AES
 	ope_key: OPE
 	name_salt: bytes
 	
 	@classmethod
 	def create(cls) -> "PhasmaDBLocalKeyring":
-		rsa_sk = rsa.generate_private_key(
-			public_exponent=65537,
-			key_size=4096
-		)
-		rsa_pk = rsa_sk.public_key()
-		
-		(paillier_pk, paillier_sk) = paillier.generate_paillier_keypair()
-		
 		sys_rand = random.SystemRandom()
 		aes_k = AES(sys_rand.randbytes(32))
 		ope_k = OPE(sys_rand.randbytes(32))
 		salt = sys_rand.randbytes(32)
-		return PhasmaDBLocalKeyring(rsa_pk, rsa_sk, paillier_pk, paillier_sk, aes_k, ope_k, salt)
+		return PhasmaDBLocalKeyring(aes_k, ope_k, salt)
 	
 	@classmethod
 	def load(cls, from_json: str) -> "PhasmaDBLocalKeyring":
 		keyring = json.loads(from_json)
-		rsa_pk = load_pem_public_key(base64.b64decode(keyring['rsa_pk']))
-		rsa_sk = load_pem_private_key(base64.b64decode(keyring['rsa_sk']), None)
-		paillier_pk = paillier.PaillierPublicKey(keyring['paillier_pk'])
-		paillier_sk = paillier.PaillierPrivateKey(paillier_pk, keyring['paillier_sk']['p'], keyring['paillier_sk']['q'])
 		aes_k = AES(base64.b64decode(keyring['aes_k']))
 		ope_k = OPE(base64.b64decode(keyring['ope_k']['k']), ValueRange(keyring['ope_k']['plain_min'], keyring['ope_k']['plain_max']), ValueRange(keyring['ope_k']['cipher_min'], keyring['ope_k']['cipher_max']))
 		salt = base64.b64decode(keyring['salt'])
-		return PhasmaDBLocalKeyring(rsa_pk, rsa_sk, paillier_pk, paillier_sk, aes_k, ope_k, salt)
+		return PhasmaDBLocalKeyring(aes_k, ope_k, salt)
 	
 	def save(self) -> str:
-		rsa_pk = base64.b64encode(self.rsa_public_key.public_bytes(encoding=Encoding.PEM, format=PublicFormat.PKCS1)).decode('ascii')
-		rsa_sk = base64.b64encode(self.rsa_private_key.private_bytes(encoding=Encoding.PEM, format=PrivateFormat.PKCS8, encryption_algorithm=NoEncryption())).decode('ascii')
-		paillier_pk = self.paillier_public_key.n
-		paillier_sk = {'p': self.paillier_private_key.p, 'q': self.paillier_private_key.q}
 		aes_k = base64.b64encode(self.aes_key.key).decode('ascii')
 		ope_k = {'k': base64.b64encode(self.ope_key.key).decode('ascii'), 'plain_min': self.ope_key.in_range.start, 'plain_max': self.ope_key.in_range.end, 'cipher_min': self.ope_key.out_range.start, 'cipher_max': self.ope_key.out_range.end}
 		salt = base64.b64encode(self.name_salt).decode('ascii')
 		keyring = {
-			'rsa_pk': rsa_pk,
-			'rsa_sk': rsa_sk,
-			'paillier_pk': paillier_pk,
-			'paillier_sk': paillier_sk,
 			'aes_k': aes_k,
 			'ope_k': ope_k,
 			'salt': salt
@@ -98,7 +77,7 @@ async def read_json(ws: aiohttp.ClientWebSocketResponse) -> Optional[Any]:
 	return None
 
 
-IndexType = Literal['add', 'multiply', 'sort', 'unique']
+IndexType = Literal['sort', 'unique']
 
 ERROR_TYPES = {
 	1: 'Command type does not exist',
@@ -109,7 +88,8 @@ ERROR_TYPES = {
 	202: 'Table already exists',
 	301: 'Row with same ID already exists',
 	302: 'Row with same unique value already exists',
-	303: 'Not all indexed columns have values'
+	303: 'Not all indexed columns have values',
+	304: 'Values specified for non-existent indices'
 }
 
 
@@ -140,30 +120,49 @@ def hash_name(keyring: PhasmaDBLocalKeyring, name: str) -> str:
 	return hashed_name.digest().hex()
 
 
+class PhasmaDBDataRow(NamedTuple):
+	indexed_data: Dict[str, int]
+	extra_data: Any
+
+
+def process_sent_data(keyring: PhasmaDBLocalKeyring, row: PhasmaDBDataRow) -> Dict:
+	padder = aes_padding.ANSIX923(128).padder()
+	data_to_encrypt = padder.update(json.dumps(row.extra_data).encode('utf-8')) + padder.finalize()
+	iv = os.urandom(16)
+	cipher = Cipher(keyring.aes_key, CBC(iv)).encryptor()
+	encrypted_data = iv + cipher.update(data_to_encrypt) + cipher.finalize()
+	return {
+		'indexed': {hash_name(keyring, k): keyring.ope_key.encrypt(v) for (k, v) in row.indexed_data.items()},
+		'extra': base64.b64encode(encrypted_data).decode('ascii')
+	}
+
+
 class PhasmaDBConnection:
-	def __init__(self, server_url: str, credential: PhasmaDBLoginCredential, session: aiohttp.ClientSession):
-		self._server_url = server_url
-		self._credential = credential
-		self._session = session
+	def __init__(self):
 		self._cmd_id_counter = 0
-		self._commands = Queue(4)
+		self._commands = Queue()
 	
-	async def loop(self) -> None:
+	async def connection(self, server_url: str, credential: PhasmaDBLoginCredential, session: aiohttp.ClientSession) -> None:
 		"""
 		Should be run in parallel with the code that uses the database, using asyncio.create_task
 		"""
 		
-		async with self._session.ws_connect(self._server_url) as ws:
-			await ws.send_json({'username': self._credential.username})
+		async with session.ws_connect(server_url) as ws:
+			await ws.send_json({'username': credential.username})
 			
 			challenge = await read_json(ws)
 			if not challenge['challenge']:
 				raise PhasmaDBError(challenge['error'])
-			token = self._credential.private_key.decrypt(bytes.fromhex(challenge['challenge']), padding.PKCS1v15())
+			token = credential.private_key.decrypt(bytes.fromhex(challenge['challenge']), rsa_padding.PKCS1v15())
 			await ws.send_json({'response': token.hex()})
 			
-			while not ws.closed:
+			sent_exit = False
+			
+			while (not ws.closed) and (not sent_exit):
 				(command, future) = await self._commands.get()
+				
+				if command['cmd'] == 'exit':
+					sent_exit = True
 				
 				cmd_id = self._cmd_id_counter
 				self._cmd_id_counter += 1
@@ -184,14 +183,24 @@ class PhasmaDBConnection:
 		await self._commands.put((command, future))
 		return await future
 	
-	async def create_table(self, keyring: PhasmaDBLocalKeyring, name: str, indices: Dict[str, IndexType]):
+	async def create_table(self, keyring: PhasmaDBLocalKeyring, name: str, indices: Dict[str, IndexType], on_error: Callable[[str, PhasmaDBError, str], None]):
 		response = await self.__send_command({
 			'cmd': 'create_table',
 			'name': hash_name(keyring, name),
-			'indices': indices
+			'indices': {hash_name(keyring, k): v for (k, v) in indices.items()}
 		})
 		if not response['success']:
-			raise PhasmaDBError(response['error'])
+			on_error("create_table", PhasmaDBError(response['error']), name)
+	
+	async def insert_data(self, keyring: PhasmaDBLocalKeyring, table_name: str, data: Dict[str, PhasmaDBDataRow], on_error: Callable[[str, PhasmaDBError, str], None]):
+		response = await self.__send_command({
+			'cmd': 'insert_data',
+			'table': hash_name(keyring, table_name),
+			'data': {k: process_sent_data(keyring, v) for (k, v) in data.items()}
+		})
+		for (row_id, result) in response['results'].items():
+			if not result['success']:
+				on_error("insert_data", PhasmaDBError(result['error']), row_id)
 	
 	async def close(self):
 		await self.__send_command({'cmd': 'exit'})

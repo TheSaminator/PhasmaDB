@@ -281,3 +281,4 @@ cython_debug/
 # Test keys
 /server/public_keys/test.pem
 /client/test_private.json
+/client/test_keyring.json

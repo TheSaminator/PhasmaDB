@@ -24,6 +24,7 @@ responding to.
     * 301: Row with same ID already exists
     * 302: Row with same unique value already exists
     * 303: Not all indexed columns have values
+    * 304: Extra values specified for non-existent indices
 
 ## Handshake
 

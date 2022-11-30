@@ -86,10 +86,11 @@ ERROR_TYPES = {
 	102: 'Authentication bytes did not match',
 	201: 'Table does not exist',
 	202: 'Table already exists',
-	301: 'Row with same ID already exists',
-	302: 'Row with same unique value already exists',
-	303: 'Not all indexed columns have values',
-	304: 'Values specified for non-existent indices'
+	301: 'Row with that ID does not exist',
+	302: 'Row with same ID already exists',
+	303: 'Row with same unique value already exists',
+	304: 'Not all indexed columns have values',
+	305: 'Values specified for non-existent indices'
 }
 
 
@@ -331,7 +332,7 @@ class PhasmaDBConnection:
 			return {k: process_received_data(keyring, column_hashes, v) for (k, v) in data.items()}
 		return None
 	
-	async def delete_by_id(self, keyring: PhasmaDBLocalKeyring, table_name: str, row_id: str, on_error: Callable[[str, PhasmaDBError, Any], None]) -> Optional[bool]:
+	async def delete_by_id(self, keyring: PhasmaDBLocalKeyring, table_name: str, row_id: str, on_error: Callable[[str, PhasmaDBError, Any], None]):
 		response = await self.__send_command({
 			'cmd': 'delete_by_id',
 			'table': hash_name(keyring, table_name),
@@ -339,9 +340,6 @@ class PhasmaDBConnection:
 		})
 		if not response['success']:
 			on_error("delete_by_id", PhasmaDBError(response['error']), (table_name, row_id))
-		else:
-			return response['deleted']
-		return None
 	
 	async def delete_data(self, keyring: PhasmaDBLocalKeyring, table_name: str, query: PhasmaDBQuerySelectClause, on_error: Callable[[str, PhasmaDBError, Any], None]) -> Optional[int]:
 		response = await self.__send_command({

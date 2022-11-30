@@ -16,10 +16,11 @@ class PhasmaDBErrorCode(IntEnum):
 	AUTH_BYTES_NO_MATCH = 102
 	TABLE_DOES_NOT_EXIST = 201
 	TABLE_ALREADY_EXISTS = 202
-	ROW_SAME_ID_ALREADY_EXISTS = 301
-	ROW_SAME_UNIQUES_ALREADY_EXISTS = 302
-	ROW_LACKS_SOME_INDEXED_VALUES = 303
-	ROW_HAS_EXTRA_INDEXED_VALUES = 304
+	ROW_DOES_NOT_EXIST = 301
+	ROW_SAME_ID_ALREADY_EXISTS = 302
+	ROW_SAME_UNIQUES_ALREADY_EXISTS = 303
+	ROW_LACKS_SOME_INDEXED_VALUES = 304
+	ROW_HAS_EXTRA_INDEXED_VALUES = 305
 
 
 T = TypeVar('T')
@@ -187,6 +188,9 @@ async def query_by_id(db: AsyncIOMotorDatabase, owner: str, table_name: str, row
 	collection_name = f"{owner}_{table['name']}"
 	
 	row = await db[collection_name].find_one({'row_id': str(row_id)})
+	if not row:
+		return FailureResult(int(PhasmaDBErrorCode.ROW_DOES_NOT_EXIST))
+	
 	indexed = row['index']
 	extra = row['extra']
 	return SuccessResult({'indexed': indexed, 'extra': extra})
@@ -300,7 +304,7 @@ async def query_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, quer
 	return SuccessResult(rows)
 
 
-async def delete_by_id(db: AsyncIOMotorDatabase, owner: str, table_name: str, row_id: str) -> Result[bool]:
+async def delete_by_id(db: AsyncIOMotorDatabase, owner: str, table_name: str, row_id: str) -> Result[None]:
 	table_name = str(table_name)
 	owner = str(owner)
 	# Check if it already exists
@@ -311,7 +315,10 @@ async def delete_by_id(db: AsyncIOMotorDatabase, owner: str, table_name: str, ro
 	collection_name = f"{owner}_{table['name']}"
 	
 	result = await db[collection_name].delete_one({'row_id': str(row_id)})
-	return SuccessResult(result.deleted_count > 0)
+	if result.deleted_count == 0:
+		return FailureResult(int(PhasmaDBErrorCode.ROW_DOES_NOT_EXIST))
+	
+	return SuccessResult(None)
 
 
 async def delete_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, query: Dict) -> Result[int]:
@@ -365,7 +372,7 @@ async def process_command(db: AsyncIOMotorDatabase, user: str, command: Any) -> 
 		return result_to_json(results, 'data')
 	elif command['cmd'] == 'delete_by_id':
 		results = await delete_by_id(db, user, command['table'], command['row_id'])
-		return result_to_json(results, 'deleted')
+		return empty_result_to_json(results)
 	elif command['cmd'] == 'delete_data':
 		results = await delete_data(db, user, command['table'], command['filter'])
 		return result_to_json(results, 'count')

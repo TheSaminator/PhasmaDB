@@ -25,40 +25,6 @@ async def main():
 		phasma = phasmadb.PhasmaDBConnection()
 		connection = asyncio.create_task(phasma.connection('http://localhost:8080/phasma-db', phasmadb.PhasmaDBLoginCredential.load("test_private.json"), session))
 		
-		await phasma.create_table(my_keyring, 'officers', {
-			'officer_number': 'unique',
-			'officer_rank': 'sort'
-		}, on_error=print_err)
-		print("Done creating table")
-		
-		await phasma.insert_data(my_keyring, 'officers', {
-			'row 1': phasmadb.PhasmaDBDataRow({
-				'officer_number': 1914,
-				'officer_rank': 5,
-			}, {
-				'officer_name': "Gaius Patallius Vanesco"
-			}),
-			'row 2': phasmadb.PhasmaDBDataRow({
-				'officer_number': 8570,
-				'officer_rank': 4,
-			}, {
-				'officer_name': "Marcus Colimarnius Iacomus"
-			}),
-			'row 3': phasmadb.PhasmaDBDataRow({
-				'officer_number': 2247,
-				'officer_rank': 3,
-			}, {
-				'officer_name': "Legatus Lanius Trollator"
-			}),
-			'row 4': phasmadb.PhasmaDBDataRow({
-				'officer_number': 1377,
-				'officer_rank': 1,
-			}, {
-				'officer_name': "Lucius Denallius Valca"
-			})
-		}, on_error=print_err)
-		print("Done inserting data")
-		
 		query_by_id_result = await phasma.query_by_id(my_keyring, 'officers', 'row 4', ['officer_number', 'officer_rank'], on_error=print_err)
 		if query_by_id_result:
 			print("Done querying by id:")
@@ -75,6 +41,22 @@ async def main():
 			print(repr(query_result))
 		else:
 			print("Querying data failed")
+		
+		delete_by_id_result = await phasma.delete_by_id(my_keyring, 'officers', 'row 1', on_error=print_err)
+		if delete_by_id_result:
+			print("Done deleting by id")
+		else:
+			print("Deleting by id failed")
+		
+		delete_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_rank') < 5, on_error=print_err)
+		if delete_result:
+			print("Done deleting data:")
+			print(delete_result)
+		else:
+			print("Deleting data failed")
+		
+		await phasma.drop_table(my_keyring, 'officers', on_error=print_err)
+		print("Done dropping table")
 		
 		await phasma.close()
 		print("Done closing connection")

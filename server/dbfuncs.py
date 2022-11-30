@@ -177,7 +177,7 @@ async def insert_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, dat
 	return {k: v for (k, v) in await asyncio.gather(*insertions)}
 
 
-async def get_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, row_id: str) -> Result[Dict]:
+async def query_by_id(db: AsyncIOMotorDatabase, owner: str, table_name: str, row_id: str) -> Result[Dict]:
 	table_name = str(table_name)
 	owner = str(owner)
 	# Check if it already exists
@@ -301,6 +301,56 @@ async def query_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, quer
 	return SuccessResult(rows)
 
 
+async def delete_by_id(db: AsyncIOMotorDatabase, owner: str, table_name: str, row_id: str) -> Result[bool]:
+	table_name = str(table_name)
+	owner = str(owner)
+	# Check if it already exists
+	table = await db.tables.find_one({'name': table_name, 'owner': owner})
+	if not table:
+		return FailureResult(int(PhasmaDBErrorCode.TABLE_DOES_NOT_EXIST))
+	
+	collection_name = f"{owner}_{table['name']}"
+	
+	result = await db[collection_name].delete_one({'row_id': str(row_id)})
+	return SuccessResult(result.deleted_count > 0)
+
+
+async def delete_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, query: Dict) -> Result[int]:
+	table_name = str(table_name)
+	owner = str(owner)
+	# Check if it already exists
+	table = await db.tables.find_one({'name': table_name, 'owner': owner})
+	if not table:
+		return FailureResult(int(PhasmaDBErrorCode.TABLE_DOES_NOT_EXIST))
+	
+	collection_name = f"{owner}_{table['name']}"
+	
+	find_query = process_received_query_filter(query, table)
+	find_query_failure = as_failure(find_query)
+	if find_query_failure:
+		return FailureResult(find_query_failure)
+	find_query = as_success(find_query)
+	
+	result = await db[collection_name].delete_many(find_query)
+	return SuccessResult(result.deleted_count)
+
+
+async def drop_table(db: AsyncIOMotorDatabase, owner: str, table_name: str) -> Result[None]:
+	table_name = str(table_name)
+	owner = str(owner)
+	# Check if it already exists
+	table = await db.tables.find_one({'name': table_name, 'owner': owner})
+	if not table:
+		return FailureResult(int(PhasmaDBErrorCode.TABLE_DOES_NOT_EXIST))
+	
+	collection_name = f"{owner}_{table['name']}"
+	collection_drop = db.drop_collection(collection_name)
+	await db.tables.delete_one({'name': table_name, 'owner': owner})
+	await collection_drop
+	
+	return SuccessResult(None)
+
+
 async def process_command(db: AsyncIOMotorDatabase, user: str, command: Any) -> Any:
 	if command['cmd'] == 'create_table':
 		result = await create_table(db, user, command)
@@ -308,11 +358,20 @@ async def process_command(db: AsyncIOMotorDatabase, user: str, command: Any) -> 
 	elif command['cmd'] == 'insert_data':
 		results = await insert_data(db, user, command['table'], command['data'])
 		return {'results': {k: empty_result_to_json(v) for (k, v) in results.items()}}
-	elif command['cmd'] == 'get_data':
-		results = await get_data(db, user, command['table'], command['row_id'])
+	elif command['cmd'] == 'query_by_id':
+		results = await query_by_id(db, user, command['table'], command['row_id'])
 		return result_to_json(results, 'row')
 	elif command['cmd'] == 'query_data':
 		results = await query_data(db, user, command['table'], command['query'])
 		return result_to_json(results, 'data')
+	elif command['cmd'] == 'delete_by_id':
+		results = await delete_by_id(db, user, command['table'], command['row_id'])
+		return result_to_json(results, 'deleted')
+	elif command['cmd'] == 'delete_data':
+		results = await delete_data(db, user, command['table'], command['filter'])
+		return result_to_json(results, 'count')
+	elif command['cmd'] == 'drop_table':
+		results = await drop_table(db, user, command['table'])
+		return empty_result_to_json(results)
 	else:
 		return {'success': False, 'error': int(PhasmaDBErrorCode.COMMAND_TYPE_DOES_NOT_EXIST)}

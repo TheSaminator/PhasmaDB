@@ -32,7 +32,7 @@ async def main():
 			print("Querying by id failed")
 		
 		query_result = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
-			select=phasmadb.Column('officer_rank') > 2,
+			select=phasmadb.Column('officer_rank') > 1,
 			sort=[('officer_number', 'desc')]
 		), ['officer_number', 'officer_rank'], on_error=print_err)
 		if query_result:
@@ -47,7 +47,7 @@ async def main():
 		else:
 			print("Deleting by id failed")
 		
-		delete_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_rank') < 5, on_error=print_err)
+		delete_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_rank') < 4, on_error=print_err)
 		if delete_result:
 			print("Done deleting data:")
 			print(delete_result)

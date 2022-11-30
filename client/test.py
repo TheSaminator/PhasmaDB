@@ -33,19 +33,19 @@ async def main():
 		await phasma.insert_data(my_keyring, 'officers', {
 			'row 1': phasmadb.PhasmaDBDataRow({
 				'officer_number': 1914,
-				'officer_rank': 5,
+				'officer_rank': 4,
 			}, {
 				'officer_name': "Gaius Patallius Vanesco"
 			}),
 			'row 2': phasmadb.PhasmaDBDataRow({
 				'officer_number': 8570,
-				'officer_rank': 4,
+				'officer_rank': 3,
 			}, {
 				'officer_name': "Marcus Colimarnius Iacomus"
 			}),
 			'row 3': phasmadb.PhasmaDBDataRow({
 				'officer_number': 2247,
-				'officer_rank': 3,
+				'officer_rank': 2,
 			}, {
 				'officer_name': "Legatus Lanius Trollator"
 			}),
@@ -66,7 +66,7 @@ async def main():
 			print("Querying by id failed")
 		
 		query_result = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
-			select=phasmadb.Column('officer_rank') > 2,
+			select=phasmadb.Column('officer_rank') > 1,
 			sort=[('officer_number', 'desc')]
 		), ['officer_number', 'officer_rank'], on_error=print_err)
 		if query_result:

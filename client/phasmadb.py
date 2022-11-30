@@ -39,7 +39,7 @@ class PhasmaDBLocalKeyring(NamedTuple):
 	def create(cls) -> "PhasmaDBLocalKeyring":
 		sys_rand = random.SystemRandom()
 		aes_k = AES(sys_rand.randbytes(32))
-		ope_k = OPE(sys_rand.randbytes(32))
+		ope_k = OPE(sys_rand.randbytes(32), ValueRange(0, 2**31 - 1), ValueRange(0, 2**63 - 1))
 		salt = sys_rand.randbytes(32)
 		return PhasmaDBLocalKeyring(aes_k, ope_k, salt)
 	

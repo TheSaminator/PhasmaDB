@@ -5,7 +5,7 @@ import json
 import os
 import random
 from asyncio import Queue
-from typing import NamedTuple, Optional, Any, Literal, Dict, Callable
+from typing import NamedTuple, Optional, Any, Literal, Dict, Callable, List
 
 import aiohttp
 from cryptography.hazmat.primitives.asymmetric import rsa, padding as rsa_padding
@@ -137,6 +137,110 @@ def process_sent_data(keyring: PhasmaDBLocalKeyring, row: PhasmaDBDataRow) -> Di
 	}
 
 
+def get_column_hashes(keyring: PhasmaDBLocalKeyring, columns: List[str]) -> Dict[str, str]:
+	return {hash_name(keyring, c): c for c in columns}
+
+
+def process_received_data(keyring: PhasmaDBLocalKeyring, column_hashes: Dict[str, str], row: Dict) -> PhasmaDBDataRow:
+	data_to_decrypt = base64.b64decode(row['extra'].encode('ascii'))
+	iv = data_to_decrypt[0:16]
+	data_to_decrypt = data_to_decrypt[16:]
+	
+	cipher = Cipher(keyring.aes_key, CBC(iv)).decryptor()
+	decrypted_data = cipher.update(data_to_decrypt) + cipher.finalize()
+	
+	unpadder = aes_padding.ANSIX923(128).unpadder()
+	decrypted_data = unpadder.update(decrypted_data) + unpadder.finalize()
+	
+	return PhasmaDBDataRow(
+		indexed_data={column_hashes[k]: keyring.ope_key.decrypt(v) for (k, v) in row['indexed'].items() if k in column_hashes.keys()},
+		extra_data=json.loads(decrypted_data.decode('utf-8'))
+	)
+
+
+SelectNodeType = Literal['and', 'or']
+SelectLeafType = Literal['eq', 'neq', 'gt', 'lt', 'gte', 'lte']
+
+
+class PhasmaDBQuerySelectNode(NamedTuple):
+	node_type: SelectNodeType
+	sub_nodes: List["PhasmaDBQuerySelectClause"]
+	
+	def __and__(self, other: "PhasmaDBQuerySelectClause") -> "PhasmaDBQuerySelectNode":
+		if self.node_type == 'and':
+			return PhasmaDBQuerySelectNode('and', [*self.sub_nodes, other])
+		else:
+			return PhasmaDBQuerySelectNode('and', [self, other])
+	
+	def __or__(self, other: "PhasmaDBQuerySelectClause") -> "PhasmaDBQuerySelectNode":
+		if self.node_type == 'or':
+			return PhasmaDBQuerySelectNode('or', [*self.sub_nodes, other])
+		else:
+			return PhasmaDBQuerySelectNode('or', [self, other])
+
+
+class PhasmaDBQuerySelectLeaf(NamedTuple):
+	column_name: str
+	leaf_type: SelectLeafType
+	test_value: int
+	
+	def __and__(self, other: "PhasmaDBQuerySelectLeaf") -> PhasmaDBQuerySelectNode:
+		return PhasmaDBQuerySelectNode('and', [self, other])
+	
+	def __or__(self, other: "PhasmaDBQuerySelectLeaf") -> PhasmaDBQuerySelectNode:
+		return PhasmaDBQuerySelectNode('or', [self, other])
+
+
+PhasmaDBQuerySelectClause = PhasmaDBQuerySelectNode | PhasmaDBQuerySelectLeaf
+
+
+class Column(NamedTuple):
+	plain_name: str
+	
+	def __eq__(self, other: int) -> PhasmaDBQuerySelectLeaf:
+		return PhasmaDBQuerySelectLeaf(self.plain_name, 'eq', other)
+	
+	def __ne__(self, other: int) -> PhasmaDBQuerySelectLeaf:
+		return PhasmaDBQuerySelectLeaf(self.plain_name, 'neq', other)
+	
+	def __lt__(self, other: int) -> PhasmaDBQuerySelectLeaf:
+		return PhasmaDBQuerySelectLeaf(self.plain_name, 'lt', other)
+	
+	def __gt__(self, other: int) -> PhasmaDBQuerySelectLeaf:
+		return PhasmaDBQuerySelectLeaf(self.plain_name, 'gt', other)
+	
+	def __lte__(self, other: int) -> PhasmaDBQuerySelectLeaf:
+		return PhasmaDBQuerySelectLeaf(self.plain_name, 'lte', other)
+	
+	def __gte__(self, other: int) -> PhasmaDBQuerySelectLeaf:
+		return PhasmaDBQuerySelectLeaf(self.plain_name, 'gte', other)
+
+
+SortOrder = Literal['asc', 'desc']
+
+
+class PhasmaDBDataQuery(NamedTuple):
+	select: PhasmaDBQuerySelectClause
+	sort: List[tuple[str, SortOrder]]
+	limit: Optional[int] = None
+
+
+def process_sent_query_select_clause(keyring: PhasmaDBLocalKeyring, clause: PhasmaDBQuerySelectClause) -> Dict:
+	if isinstance(clause, PhasmaDBQuerySelectNode):
+		return {clause.node_type: [process_sent_query_select_clause(keyring, node) for node in clause.sub_nodes]}
+	elif isinstance(clause, PhasmaDBQuerySelectLeaf):
+		return {hash_name(keyring, clause.column_name): {clause.leaf_type: keyring.ope_key.encrypt(clause.test_value)}}
+	return {}
+
+
+def process_sent_query(keyring: PhasmaDBLocalKeyring, query: PhasmaDBDataQuery) -> Dict:
+	return {
+		'filter': process_sent_query_select_clause(keyring, query.select),
+		'sort': [(hash_name(keyring, k), v) for (k, v) in query.sort],
+		'limit': query.limit
+	}
+
+
 class PhasmaDBConnection:
 	def __init__(self):
 		self._cmd_id_counter = 0
@@ -201,6 +305,20 @@ class PhasmaDBConnection:
 		for (row_id, result) in response['results'].items():
 			if not result['success']:
 				on_error("insert_data", PhasmaDBError(result['error']), row_id)
+	
+	async def query_data(self, keyring: PhasmaDBLocalKeyring, table_name: str, query: PhasmaDBDataQuery, requested_indices: List[str], on_error: Callable[[str, PhasmaDBError, str], None]) -> Optional[Dict[str, PhasmaDBDataRow]]:
+		response = await self.__send_command({
+			'cmd': 'query_data',
+			'table': hash_name(keyring, table_name),
+			'query': process_sent_query(keyring, query)
+		})
+		if not response['success']:
+			on_error("query_data", PhasmaDBError(response['error']), table_name)
+		else:
+			data = response['data']
+			column_hashes = get_column_hashes(keyring, requested_indices)
+			return {k: process_received_data(keyring, column_hashes, v) for (k, v) in data.items()}
+		return None
 	
 	async def close(self):
 		await self.__send_command({'cmd': 'exit'})

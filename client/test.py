@@ -53,11 +53,20 @@ async def main():
 		}, on_error=print_err)
 		print("Done inserting data")
 		
+		query_result = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
+			select=phasmadb.Column('officer_rank') > 1,
+			sort=[('officer_number', 'desc')]
+		), ['officer_number', 'officer_rank'], on_error=print_err)
+		if query_result:
+			print("Done querying data:")
+			print(repr(query_result))
+		else:
+			print("Querying data failed")
+		
 		await phasma.close()
 		print("Done closing connection")
 		
 		await connection
-		exit()
 
 
 if __name__ == '__main__':

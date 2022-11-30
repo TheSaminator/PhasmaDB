@@ -20,7 +20,7 @@ responding to.
 * Table-related
     * 201: Table does not exist
     * 202: Table already exists
-* Row insertion-related
+* Row-related
     * 301: Row with same ID already exists
     * 302: Row with same unique value already exists
     * 303: Not all indexed columns have values

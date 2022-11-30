@@ -1,9 +1,10 @@
 import asyncio
 import re
 from enum import IntEnum
-from typing import Any, NamedTuple, Generic, TypeVar, Optional, Union, Literal, Dict
+from typing import Any, NamedTuple, Generic, TypeVar, Optional, Union, Literal, Dict, List
 
 import nanoid
+import pymongo
 from aiohttp import web
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -72,10 +73,25 @@ def validate_index_type(index_type: str) -> Optional[Literal['sort', 'unique']]:
 
 
 def empty_result_to_json(result: Result[None], cmd_id: Optional[int]) -> Any:
-	value = {'success': True, 'cmd_id': cmd_id}
+	value = {'success': True}
 	error = as_failure(result)
 	if error:
 		value = {'success': False, 'error': error, 'cmd_id': cmd_id}
+	if cmd_id:
+		value['cmd_id'] = cmd_id
+	return value
+
+
+def result_to_json(result: Result[T], output_key: str, cmd_id: Optional[int]) -> Any:
+	value = {}
+	error = as_failure(result)
+	output = as_success(result)
+	if output:
+		value['success'] = True
+		value[output_key] = output
+	elif error:
+		value['success'] = False
+		value['error'] = error
 	if cmd_id:
 		value['cmd_id'] = cmd_id
 	return value
@@ -165,6 +181,114 @@ async def insert_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, dat
 	return {k: v for (k, v) in await asyncio.gather(*insertions)}
 
 
+def get_sole_key(d: Dict) -> Optional[str]:
+	sole_key = None
+	for key in d.keys():
+		if not sole_key:
+			sole_key = key
+		else:
+			return None
+	
+	return sole_key
+
+
+def process_received_query_filter(query: Dict, table: Dict) -> Result[Dict]:
+	sole_key = get_sole_key(query)
+	if not sole_key:
+		return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
+	
+	if sole_key == 'and':
+		return SuccessResult({'$and': [process_received_query_filter(q, table) for q in query[sole_key]]})
+	elif sole_key == 'or':
+		return SuccessResult({'$or': [process_received_query_filter(q, table) for q in query[sole_key]]})
+	else:
+		column = str(sole_key)
+		
+		if column[0] == '$':
+			return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
+		if column not in table['indices']:
+			return FailureResult(PhasmaDBErrorCode.ROW_HAS_EXTRA_INDEXED_VALUES)
+		
+		operation = get_sole_key(query[column])
+		index_column = f"index.{column}"
+		
+		if not operation:
+			return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
+		elif operation == 'eq':
+			return SuccessResult({index_column: int(query[column][operation])})
+		elif operation == 'neq':
+			return SuccessResult({'$not': {index_column: int(query[column][operation])}})
+		elif operation == 'lt':
+			return SuccessResult({index_column: {'$lt': int(query[column][operation])}})
+		elif operation == 'gt':
+			return SuccessResult({index_column: {'$gt': int(query[column][operation])}})
+		elif operation == 'lte':
+			return SuccessResult({index_column: {'$lte': int(query[column][operation])}})
+		elif operation == 'gte':
+			return SuccessResult({index_column: {'$gte': int(query[column][operation])}})
+		else:
+			return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
+
+
+def process_received_query_order(order: List[tuple[str, Literal['asc', 'desc']]], table: Dict) -> Result[List]:
+	sort = []
+	for (column, col_order) in order:
+		if column[0] == '$':
+			return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
+		if column not in table['indices']:
+			return FailureResult(PhasmaDBErrorCode.ROW_HAS_EXTRA_INDEXED_VALUES)
+		
+		if col_order == 'asc':
+			sort_order = pymongo.ASCENDING
+		elif col_order == 'desc':
+			sort_order = pymongo.DESCENDING
+		else:
+			return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
+		sort.append((f"index.{column}", sort_order))
+	return SuccessResult(sort)
+
+
+async def query_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, query: Dict) -> Result[Dict[str, Dict]]:
+	table_name = str(table_name)
+	owner = str(owner)
+	# Check if it already exists
+	table = await db.tables.find_one({'name': table_name, 'owner': owner})
+	if not table:
+		return FailureResult(int(PhasmaDBErrorCode.TABLE_DOES_NOT_EXIST))
+	
+	collection_name = f"{owner}_{table['name']}"
+	
+	find_query = process_received_query_filter(query['filter'], table)
+	find_query_failure = as_failure(find_query)
+	if find_query_failure:
+		return FailureResult(find_query_failure)
+	find_query = as_success(find_query)
+	
+	sort_query = process_received_query_order(query['sort'], table)
+	sort_query_failure = as_failure(sort_query)
+	if sort_query_failure:
+		return FailureResult(sort_query_failure)
+	sort_query = as_success(sort_query)
+	
+	cursor = db[collection_name].find(find_query).sort(sort_query)
+	rows = {}
+	row_limit = None
+	if 'limit' in query.keys() and query['limit'] is not None:
+		row_limit = int(query['limit'])
+	
+	async for row in cursor:
+		row_id = row['row_id']
+		indexed = row['index']
+		extra = row['extra']
+		rows[row_id] = {'indexed': indexed, 'extra': extra}
+		
+		if row_limit is not None:
+			if len(rows) >= row_limit:
+				break
+	
+	return SuccessResult(rows)
+
+
 async def process_command(db: AsyncIOMotorDatabase, user: str, command: Any) -> Any:
 	if command['cmd'] == 'create_table':
 		result = await create_table(db, user, command)
@@ -172,5 +296,8 @@ async def process_command(db: AsyncIOMotorDatabase, user: str, command: Any) -> 
 	elif command['cmd'] == 'insert_data':
 		results = await insert_data(db, user, command['table'], command['data'])
 		return {'cmd_id': command['cmd_id'], 'results': {k: empty_result_to_json(v, None) for (k, v) in results.items()}}
+	elif command['cmd'] == 'query_data':
+		results = await query_data(db, user, command['table'], command['query'])
+		return result_to_json(results, 'data', command['cmd_id'])
 	else:
 		return {'success': False, 'error': int(PhasmaDBErrorCode.COMMAND_TYPE_DOES_NOT_EXIST)}

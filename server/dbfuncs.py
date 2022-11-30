@@ -177,6 +177,22 @@ async def insert_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, dat
 	return {k: v for (k, v) in await asyncio.gather(*insertions)}
 
 
+async def get_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, row_id: str) -> Result[Dict]:
+	table_name = str(table_name)
+	owner = str(owner)
+	# Check if it already exists
+	table = await db.tables.find_one({'name': table_name, 'owner': owner})
+	if not table:
+		return FailureResult(int(PhasmaDBErrorCode.TABLE_DOES_NOT_EXIST))
+	
+	collection_name = f"{owner}_{table['name']}"
+	
+	row = await db[collection_name].find_one({'row_id': str(row_id)})
+	indexed = row['index']
+	extra = row['extra']
+	return SuccessResult({'indexed': indexed, 'extra': extra})
+
+
 def get_sole_key(d: Dict) -> Optional[str]:
 	sole_key = None
 	for key in d.keys():
@@ -287,13 +303,14 @@ async def query_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, quer
 
 async def process_command(db: AsyncIOMotorDatabase, user: str, command: Any) -> Any:
 	if command['cmd'] == 'create_table':
-		print(repr(command))
 		result = await create_table(db, user, command)
-		print(repr(result))
 		return empty_result_to_json(result)
 	elif command['cmd'] == 'insert_data':
 		results = await insert_data(db, user, command['table'], command['data'])
 		return {'results': {k: empty_result_to_json(v) for (k, v) in results.items()}}
+	elif command['cmd'] == 'get_data':
+		results = await get_data(db, user, command['table'], command['row_id'])
+		return result_to_json(results, 'row')
 	elif command['cmd'] == 'query_data':
 		results = await query_data(db, user, command['table'], command['query'])
 		return result_to_json(results, 'data')

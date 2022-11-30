@@ -59,6 +59,13 @@ async def main():
 		}, on_error=print_err)
 		print("Done inserting data")
 		
+		get_result = await phasma.get_data(my_keyring, 'officers', 'row 4', ['officer_number', 'officer_rank'], on_error=print_err)
+		if get_result:
+			print("Done getting data:")
+			print(repr(get_result))
+		else:
+			print("Getting data failed")
+		
 		query_result = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
 			select=phasmadb.Column('officer_rank') > 2,
 			sort=[('officer_number', 'desc')]

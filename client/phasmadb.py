@@ -299,6 +299,20 @@ class PhasmaDBConnection:
 			if not result['success']:
 				on_error("insert_data", PhasmaDBError(result['error']), row_id)
 	
+	async def get_data(self, keyring: PhasmaDBLocalKeyring, table_name: str, row_id: str, requested_indices: List[str], on_error: Callable[[str, PhasmaDBError, str], None]) -> Optional[PhasmaDBDataRow]:
+		response = await self.__send_command({
+			'cmd': 'get_data',
+			'table': hash_name(keyring, table_name),
+			'row_id': row_id
+		})
+		if not response['success']:
+			on_error("query_data", PhasmaDBError(response['error']), table_name)
+		else:
+			data = response['row']
+			column_hashes = get_column_hashes(keyring, requested_indices)
+			return process_received_data(keyring, column_hashes, data)
+		return None
+	
 	async def query_data(self, keyring: PhasmaDBLocalKeyring, table_name: str, query: PhasmaDBDataQuery, requested_indices: List[str], on_error: Callable[[str, PhasmaDBError, str], None]) -> Optional[Dict[str, PhasmaDBDataRow]]:
 		response = await self.__send_command({
 			'cmd': 'query_data',

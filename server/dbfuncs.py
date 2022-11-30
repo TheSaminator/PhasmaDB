@@ -72,17 +72,15 @@ def validate_index_type(index_type: str) -> Optional[Literal['sort', 'unique']]:
 		return None
 
 
-def empty_result_to_json(result: Result[None], cmd_id: Optional[int]) -> Any:
+def empty_result_to_json(result: Result[None]) -> Any:
 	value = {'success': True}
 	error = as_failure(result)
 	if error:
-		value = {'success': False, 'error': error, 'cmd_id': cmd_id}
-	if cmd_id:
-		value['cmd_id'] = cmd_id
+		value = {'success': False, 'error': error}
 	return value
 
 
-def result_to_json(result: Result[T], output_key: str, cmd_id: Optional[int]) -> Any:
+def result_to_json(result: Result[T], output_key: str) -> Any:
 	value = {}
 	error = as_failure(result)
 	output = as_success(result)
@@ -92,8 +90,6 @@ def result_to_json(result: Result[T], output_key: str, cmd_id: Optional[int]) ->
 	elif error:
 		value['success'] = False
 		value['error'] = error
-	if cmd_id:
-		value['cmd_id'] = cmd_id
 	return value
 
 
@@ -291,13 +287,15 @@ async def query_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, quer
 
 async def process_command(db: AsyncIOMotorDatabase, user: str, command: Any) -> Any:
 	if command['cmd'] == 'create_table':
+		print(repr(command))
 		result = await create_table(db, user, command)
-		return empty_result_to_json(result, command['cmd_id'])
+		print(repr(result))
+		return empty_result_to_json(result)
 	elif command['cmd'] == 'insert_data':
 		results = await insert_data(db, user, command['table'], command['data'])
-		return {'cmd_id': command['cmd_id'], 'results': {k: empty_result_to_json(v, None) for (k, v) in results.items()}}
+		return {'results': {k: empty_result_to_json(v) for (k, v) in results.items()}}
 	elif command['cmd'] == 'query_data':
 		results = await query_data(db, user, command['table'], command['query'])
-		return result_to_json(results, 'data', command['cmd_id'])
+		return result_to_json(results, 'data')
 	else:
 		return {'success': False, 'error': int(PhasmaDBErrorCode.COMMAND_TYPE_DOES_NOT_EXIST)}

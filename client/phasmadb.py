@@ -243,7 +243,6 @@ def process_sent_query(keyring: PhasmaDBLocalKeyring, query: PhasmaDBDataQuery) 
 
 class PhasmaDBConnection:
 	def __init__(self):
-		self._cmd_id_counter = 0
 		self._commands = Queue()
 	
 	async def connection(self, server_url: str, credential: PhasmaDBLoginCredential, session: aiohttp.ClientSession) -> None:
@@ -268,16 +267,10 @@ class PhasmaDBConnection:
 				if command['cmd'] == 'exit':
 					sent_exit = True
 				
-				cmd_id = self._cmd_id_counter
-				self._cmd_id_counter += 1
-				command['cmd_id'] = cmd_id
-				
 				await ws.send_json(command)
 				response = await read_json(ws)
 				if not response:
 					break
-				
-				assert response['cmd_id'] == cmd_id
 				
 				future.set_result(response)
 				self._commands.task_done()

@@ -30,7 +30,7 @@ async def index(request: web.Request) -> web.WebSocketResponse:
 		if not req:
 			break
 		if req['cmd'] == 'exit':
-			await ws.send_json({"farewell": True, 'cmd_id': req['cmd_id']})
+			await ws.send_json({"farewell": True})
 			await ws.close()
 			break
 		res = await dbfuncs.process_command(request.app['db'], username, req)

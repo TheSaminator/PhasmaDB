@@ -24,28 +24,7 @@ async def main():
 		phasma = phasmadb.PhasmaDBConnection()
 		connection = asyncio.create_task(phasma.connection('http://localhost:8080/phasma-db', phasmadb.PhasmaDBLoginCredential.load("test_private.json"), session))
 		
-		query_by_id_result = await phasma.query_by_id(my_keyring, 'officers', 'row 4', ['officer_number', 'officer_rank'], on_error=print_err)
-		if query_by_id_result:
-			print("Done querying by id:")
-			print(repr(query_by_id_result))
-		else:
-			print("Querying by id failed")
-		
-		query_result = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
-			select=phasmadb.Column('officer_rank') > 1,
-			sort=[('officer_number', 'desc')]
-		), ['officer_number', 'officer_rank'], on_error=print_err)
-		if query_result:
-			print("Done querying data:")
-			print(repr(query_result))
-		else:
-			print("Querying data failed")
-		
-		delete_by_id_result = await phasma.delete_by_id(my_keyring, 'officers', 'row 1', on_error=print_err)
-		if delete_by_id_result:
-			print("Done deleting by id")
-		else:
-			print("Deleting by id failed")
+		await phasma.delete_by_id(my_keyring, 'officers', 'row 1', on_error=print_err)
 		
 		delete_by_text_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_email') == "dgsf@zoomer.union", on_error=print_err)
 		if delete_by_text_result:

@@ -151,7 +151,11 @@ async def insert_datum(db: AsyncIOMotorDatabase, owner: str, table: Any, datum_i
 		if index_type == 'sort' or index_type == 'unique':
 			row_index_value = int(datum['indexed'][index_name])
 		else:
-			row_index_value = str(datum['indexed'][index_name])
+			row_index_value = datum['indexed'][index_name]
+			if isinstance(row_index_value, list):
+				row_index_value = [str(token) for token in row_index_value]
+			else:
+				row_index_value = str(row_index_value)
 		
 		indexed_data[index_name] = row_index_value
 		if index_type == 'unique' or index_type == 'unique_text':

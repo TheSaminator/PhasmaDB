@@ -27,7 +27,8 @@ async def main():
 		await phasma.create_table(my_keyring, 'officers', {
 			'officer_number': 'unique',
 			'officer_rank': 'sort',
-			'officer_email': 'unique_text'
+			'officer_email': 'unique_text',
+			'officer_medals': 'text'
 		}, on_error=print_err)
 		print("Done creating table")
 		
@@ -35,34 +36,42 @@ async def main():
 			'row 1': phasmadb.PhasmaDBDataRow({
 				'officer_number': 1914,
 				'officer_rank': 4,
-				'officer_email': "chadmusket@zoomer.union"
+				'officer_email': "chadmusket@zoomer.union",
+				'officer_medals': phasmadb.PhasmaDBTextData("Papism Weeb KOn FalloutNewVegas", 'word')
 			}, {
 				'officer_name': "Gaius Patallius Vanesco",
-				'officer_email': "chadmusket@zoomer.union"
+				'officer_email': "chadmusket@zoomer.union",
+				'officer_medals': "Papist Weeb KOn FalloutNewVegas"
 			}),
 			'row 2': phasmadb.PhasmaDBDataRow({
 				'officer_number': 8570,
 				'officer_rank': 3,
-				'officer_email': "dgsf@zoomer.union"
+				'officer_email': "dgsf@zoomer.union",
+				'officer_medals': phasmadb.PhasmaDBTextData("Weeb FalloutNewVegas Warhammer40k", 'word')
 			}, {
 				'officer_name': "Marcus Colimarnius Iacomus",
-				'officer_email': "dgsf@zoomer.union"
+				'officer_email': "dgsf@zoomer.union",
+				'officer_medals': "Weeb FalloutNewVegas Warhammer40k"
 			}),
 			'row 3': phasmadb.PhasmaDBDataRow({
 				'officer_number': 2247,
 				'officer_rank': 2,
-				'officer_email': "laniustrolling@zoomer.union"
+				'officer_email': "laniustrolling@zoomer.union",
+				'officer_medals': phasmadb.PhasmaDBTextData("FalloutNewVegas Warhammer40k MechyrdiaLore", 'word')
 			}, {
 				'officer_name': "Legatus Lanius Trollator",
-				'officer_email': "laniustrolling@zoomer.union"
+				'officer_email': "laniustrolling@zoomer.union",
+				'officer_medals': "FalloutNewVegas Warhammer40k MechyrdiaLore"
 			}),
 			'row 4': phasmadb.PhasmaDBDataRow({
 				'officer_number': 1377,
 				'officer_rank': 1,
-				'officer_email': "fortniteluvr69@zoomer.union"
+				'officer_email': "fortniteluvr69@zoomer.union",
+				'officer_medals': phasmadb.PhasmaDBTextData("Papism FalloutNewVegas", 'word')
 			}, {
 				'officer_name': "Lucius Denallius Valca",
-				'officer_email': "fortniteluvr69@zoomer.union"
+				'officer_email': "fortniteluvr69@zoomer.union",
+				'officer_medals': "Papism FalloutNewVegas"
 			})
 		}, on_error=print_err)
 		print("Done inserting data")
@@ -79,20 +88,30 @@ async def main():
 			sort=[]
 		), ['officer_number', 'officer_rank'], on_error=print_err)
 		if query_result_1:
-			print("Done querying data by email:")
+			print("Done querying by unique text:")
 			print(repr(query_result_1))
 		else:
-			print("Querying data by email failed")
+			print("Querying by unique text failed")
 		
 		query_result_2 = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
 			select=phasmadb.Column('officer_rank') > 1,
 			sort=[('officer_rank', 'desc')]
 		), ['officer_number', 'officer_rank'], on_error=print_err)
 		if query_result_2:
-			print("Done querying data by rank:")
+			print("Done querying by sorted number:")
 			print(repr(query_result_2))
 		else:
-			print("Querying data by rank failed")
+			print("Querying by sorted number failed")
+		
+		query_result_3 = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
+			select=phasmadb.Column('officer_medals') == 'Warhammer40k',
+			sort=[('officer_rank', 'desc')]
+		), ['officer_number', 'officer_rank'], on_error=print_err)
+		if query_result_3:
+			print("Done querying by word-token index:")
+			print(repr(query_result_3))
+		else:
+			print("Querying by word-token index failed")
 		
 		await phasma.close()
 		print("Done closing connection")

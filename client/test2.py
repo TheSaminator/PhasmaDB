@@ -47,12 +47,19 @@ async def main():
 		else:
 			print("Deleting by id failed")
 		
-		delete_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_rank') < 4, on_error=print_err)
+		delete_by_text_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_email') == "dgsf@zoomer.union", on_error=print_err)
+		if delete_by_text_result:
+			print("Done deleting by text index:")
+			print(delete_by_text_result)
+		else:
+			print("Deleting by text index failed")
+		
+		delete_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_rank') < 3, on_error=print_err)
 		if delete_result:
-			print("Done deleting data:")
+			print("Done deleting by sort index:")
 			print(delete_result)
 		else:
-			print("Deleting data failed")
+			print("Deleting by sort index failed")
 		
 		await phasma.drop_table(my_keyring, 'officers', on_error=print_err)
 		print("Done dropping table")

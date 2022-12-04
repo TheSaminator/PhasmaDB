@@ -26,7 +26,8 @@ async def main():
 		
 		await phasma.create_table(my_keyring, 'officers', {
 			'officer_number': 'unique',
-			'officer_rank': 'sort'
+			'officer_rank': 'sort',
+			'officer_email': 'unique_text'
 		}, on_error=print_err)
 		print("Done creating table")
 		
@@ -34,26 +35,34 @@ async def main():
 			'row 1': phasmadb.PhasmaDBDataRow({
 				'officer_number': 1914,
 				'officer_rank': 4,
+				'officer_email': "chadmusket@zoomer.union"
 			}, {
-				'officer_name': "Gaius Patallius Vanesco"
+				'officer_name': "Gaius Patallius Vanesco",
+				'officer_email': "chadmusket@zoomer.union"
 			}),
 			'row 2': phasmadb.PhasmaDBDataRow({
 				'officer_number': 8570,
 				'officer_rank': 3,
+				'officer_email': "dgsf@zoomer.union"
 			}, {
-				'officer_name': "Marcus Colimarnius Iacomus"
+				'officer_name': "Marcus Colimarnius Iacomus",
+				'officer_email': "dgsf@zoomer.union"
 			}),
 			'row 3': phasmadb.PhasmaDBDataRow({
 				'officer_number': 2247,
 				'officer_rank': 2,
+				'officer_email': "laniustrolling@zoomer.union"
 			}, {
-				'officer_name': "Legatus Lanius Trollator"
+				'officer_name': "Legatus Lanius Trollator",
+				'officer_email': "laniustrolling@zoomer.union"
 			}),
 			'row 4': phasmadb.PhasmaDBDataRow({
 				'officer_number': 1377,
 				'officer_rank': 1,
+				'officer_email': "fortniteluvr69@zoomer.union"
 			}, {
-				'officer_name': "Lucius Denallius Valca"
+				'officer_name': "Lucius Denallius Valca",
+				'officer_email': "fortniteluvr69@zoomer.union"
 			})
 		}, on_error=print_err)
 		print("Done inserting data")
@@ -65,15 +74,25 @@ async def main():
 		else:
 			print("Querying by id failed")
 		
-		query_result = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
-			select=phasmadb.Column('officer_rank') > 1,
-			sort=[('officer_number', 'desc')]
+		query_result_1 = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
+			select=phasmadb.Column('officer_email') == 'dgsf@zoomer.union',
+			sort=[]
 		), ['officer_number', 'officer_rank'], on_error=print_err)
-		if query_result:
-			print("Done querying data:")
-			print(repr(query_result))
+		if query_result_1:
+			print("Done querying data by email:")
+			print(repr(query_result_1))
 		else:
-			print("Querying data failed")
+			print("Querying data by email failed")
+		
+		query_result_2 = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
+			select=phasmadb.Column('officer_rank') > 1,
+			sort=[('officer_rank', 'desc')]
+		), ['officer_number', 'officer_rank'], on_error=print_err)
+		if query_result_2:
+			print("Done querying data by rank:")
+			print(repr(query_result_2))
+		else:
+			print("Querying data by rank failed")
 		
 		await phasma.close()
 		print("Done closing connection")

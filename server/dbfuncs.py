@@ -21,6 +21,7 @@ class PhasmaDBErrorCode(IntEnum):
 	ROW_SAME_UNIQUES_ALREADY_EXISTS = 303
 	ROW_LACKS_SOME_INDEXED_VALUES = 304
 	ROW_HAS_EXTRA_INDEXED_VALUES = 305
+	INVALID_INDEX_TYPE = 306
 
 
 T = TypeVar('T')
@@ -64,8 +65,8 @@ def validate_index_name(index_name: str) -> Optional[str]:
 	return None
 
 
-def validate_index_type(index_type: str) -> Optional[Literal['sort', 'unique']]:
-	valid_indices = {'sort', 'unique'}
+def validate_index_type(index_type: str) -> Optional[Literal['sort', 'unique', 'text', 'unique_text']]:
+	valid_indices = {'sort', 'unique', 'text', 'unique_text'}
 	if index_type in valid_indices:
 		return str(index_type)
 	else:
@@ -124,6 +125,8 @@ async def create_table(db: AsyncIOMotorDatabase, owner: str, table_spec: Any) ->
 			index_creations.append(db[collection_name].create_index(f"index.{k}"))
 		elif v == 'unique':
 			index_creations.append(db[collection_name].create_index(f"index.{k}", unique=True))
+		elif v == 'text':
+			index_creations.append(db[collection_name].create_index(f"index.{k}"))
 	
 	await asyncio.gather(*index_creations)
 	
@@ -145,9 +148,13 @@ async def insert_datum(db: AsyncIOMotorDatabase, owner: str, table: Any, datum_i
 		if index_name not in datum['indexed'].keys():
 			return datum_id, FailureResult(int(PhasmaDBErrorCode.ROW_LACKS_SOME_INDEXED_VALUES))
 		
-		row_index_value = int(datum['indexed'][index_name])
+		if index_type == 'sort' or index_type == 'unique':
+			row_index_value = int(datum['indexed'][index_name])
+		else:
+			row_index_value = str(datum['indexed'][index_name])
+		
 		indexed_data[index_name] = row_index_value
-		if index_type == 'unique':
+		if index_type == 'unique' or index_type == 'unique_text':
 			test_awaitable = db[collection_name].find_one({f'index.{index_name}': row_index_value})
 			test_unique_indices.append(test_awaitable)
 	
@@ -226,6 +233,9 @@ def process_received_query_filter(query: Dict, table: Dict) -> Result[Dict]:
 		
 		operation = get_sole_key(query[column])
 		index_column = f"index.{column}"
+		index_type = table['indices'][column]
+		if (operation == 'text') != (index_type == 'text' or index_type == 'unique_text'):
+			return FailureResult(PhasmaDBErrorCode.INVALID_INDEX_TYPE)
 		
 		if not operation:
 			return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
@@ -241,6 +251,12 @@ def process_received_query_filter(query: Dict, table: Dict) -> Result[Dict]:
 			return SuccessResult({index_column: {'$lte': int(query[column][operation])}})
 		elif operation == 'gte':
 			return SuccessResult({index_column: {'$gte': int(query[column][operation])}})
+		elif operation == 'text':
+			text_test = query[column][operation]
+			if isinstance(text_test, list):
+				return SuccessResult({index_column: {'$all': [str(w) for w in text_test]}})
+			else:
+				return SuccessResult({index_column: str(text_test)})
 		else:
 			return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
 
@@ -252,6 +268,10 @@ def process_received_query_order(order: List[tuple[str, Literal['asc', 'desc']]]
 			return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
 		if column not in table['indices']:
 			return FailureResult(PhasmaDBErrorCode.ROW_HAS_EXTRA_INDEXED_VALUES)
+		
+		index_type = table['indices'][column]
+		if index_type == 'text' or index_type == 'unique_text':
+			return FailureResult(PhasmaDBErrorCode.INVALID_INDEX_TYPE)
 		
 		if col_order == 'asc':
 			sort_order = pymongo.ASCENDING
@@ -285,7 +305,10 @@ async def query_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, quer
 		return FailureResult(sort_query_failure)
 	sort_query = as_success(sort_query)
 	
-	cursor = db[collection_name].find(find_query).sort(sort_query)
+	cursor = db[collection_name].find(find_query)
+	if len(sort_query) > 0:
+		cursor = cursor.sort(sort_query)
+	
 	rows = {}
 	row_limit = None
 	if 'limit' in query.keys() and query['limit'] is not None:

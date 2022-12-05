@@ -113,6 +113,16 @@ async def main():
 		else:
 			print("Querying by word-token index failed")
 		
+		query_result_4 = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
+			select=(phasmadb.Column('officer_number') > 2000) & ~(phasmadb.Column('officer_medals') == 'Weeb'),
+			sort=[]
+		), ['officer_number', 'officer_rank'], on_error=print_err)
+		if query_result_4:
+			print("Done querying by compound query:")
+			print(repr(query_result_4))
+		else:
+			print("Querying by compound query failed")
+		
 		await phasma.close()
 		print("Done closing connection")
 		

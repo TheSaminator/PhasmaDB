@@ -231,7 +231,7 @@ def process_received_query_filter(query: Dict, table: Dict) -> Result[Dict]:
 			if subquery_failure:
 				return FailureResult(subquery_failure)
 			subqueries.append(as_success(subquery))
-			
+		
 		return SuccessResult({'$and': subqueries})
 	elif sole_key == 'or':
 		subqueries = []
@@ -241,8 +241,28 @@ def process_received_query_filter(query: Dict, table: Dict) -> Result[Dict]:
 			if subquery_failure:
 				return FailureResult(subquery_failure)
 			subqueries.append(as_success(subquery))
-			
+		
 		return SuccessResult({'$or': subqueries})
+	elif sole_key == 'not_and':
+		subqueries = []
+		for q in query[sole_key]:
+			subquery = process_received_query_filter(q, table)
+			subquery_failure = as_failure(subquery)
+			if subquery_failure:
+				return FailureResult(subquery_failure)
+			subqueries.append(as_success(subquery))
+		
+		return SuccessResult({'$nor': [{'$and': subqueries}]})
+	elif sole_key == 'not_or':
+		subqueries = []
+		for q in query[sole_key]:
+			subquery = process_received_query_filter(q, table)
+			subquery_failure = as_failure(subquery)
+			if subquery_failure:
+				return FailureResult(subquery_failure)
+			subqueries.append(as_success(subquery))
+		
+		return SuccessResult({'$nor': subqueries})
 	else:
 		column = str(sole_key)
 		

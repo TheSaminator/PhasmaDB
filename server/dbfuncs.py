@@ -232,6 +232,9 @@ def get_sole_key(d: Dict) -> Optional[str]:
 
 
 def process_received_query_filter(query: Dict, table: Dict) -> Result[Dict]:
+	if len(query) == 0:
+		return SuccessResult({})
+	
 	sole_key = get_sole_key(query)
 	if not sole_key:
 		return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)

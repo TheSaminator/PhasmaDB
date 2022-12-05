@@ -285,7 +285,7 @@ def process_sent_query(keyring: PhasmaDBLocalKeyring, query: PhasmaDBDataQuery) 
 	}
 
 
-def process_sent_deletion(keyring: PhasmaDBLocalKeyring, query: PhasmaDBQuerySelectClause) -> Dict:
+def process_sent_deletion(keyring: PhasmaDBLocalKeyring, query: PhasmaDBQuerySelectClause | SelectAll) -> Dict:
 	return process_sent_query_select_clause(keyring, query)
 
 

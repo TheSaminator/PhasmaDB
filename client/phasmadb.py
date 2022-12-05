@@ -87,11 +87,10 @@ ERROR_TYPES = {
 	201: 'Table does not exist',
 	202: 'Table already exists',
 	301: 'Row with that ID does not exist',
-	302: 'Row with same ID already exists',
-	303: 'Row with same unique value already exists',
-	304: 'Not all indexed columns have values',
-	305: 'Values specified for non-existent indices',
-	306: 'Values incompatible with indices\' types'
+	302: 'Row with same unique value already exists',
+	303: 'Not all indexed columns have values',
+	304: 'Values specified for non-existent indices',
+	305: 'Values incompatible with indices\' types'
 }
 
 

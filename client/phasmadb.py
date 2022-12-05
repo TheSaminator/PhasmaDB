@@ -331,7 +331,7 @@ class PhasmaDBConnection:
 		await self._commands.put((command, future))
 		return await future
 	
-	async def create_table(self, keyring: PhasmaDBLocalKeyring, name: str, indices: Dict[str, IndexType], on_error: Callable[[str, PhasmaDBError, Any], None]):
+	async def create_table(self, keyring: PhasmaDBLocalKeyring, name: str, indices: Dict[str, IndexType], on_error: Callable[[str, PhasmaDBError, Any], None]) -> bool:
 		response = await self.__send_command({
 			'cmd': 'create_table',
 			'name': hash_name(keyring, name),
@@ -339,16 +339,21 @@ class PhasmaDBConnection:
 		})
 		if not response['success']:
 			on_error("create_table", PhasmaDBError(response['error']), (name,))
+			return False
+		return True
 	
-	async def insert_data(self, keyring: PhasmaDBLocalKeyring, table_name: str, data: Dict[str, PhasmaDBDataRow], on_error: Callable[[str, PhasmaDBError, Any], None]):
+	async def insert_data(self, keyring: PhasmaDBLocalKeyring, table_name: str, data: Dict[str, PhasmaDBDataRow], on_error: Callable[[str, PhasmaDBError, Any], None]) -> Dict[str, bool]:
 		response = await self.__send_command({
 			'cmd': 'insert_data',
 			'table': hash_name(keyring, table_name),
 			'data': {k: process_sent_data(keyring, v) for (k, v) in data.items()}
 		})
+		results = {k: True for k in response['results'].keys()}
 		for (row_id, result) in response['results'].items():
 			if not result['success']:
 				on_error("insert_data", PhasmaDBError(result['error']), (table_name, row_id))
+				results[row_id] = False
+		return results
 	
 	async def query_by_id(self, keyring: PhasmaDBLocalKeyring, table_name: str, row_id: str, requested_indices: List[str], on_error: Callable[[str, PhasmaDBError, Any], None]) -> Optional[PhasmaDBDataRow]:
 		response = await self.__send_command({
@@ -378,7 +383,7 @@ class PhasmaDBConnection:
 			return {k: process_received_data(keyring, column_hashes, v) for (k, v) in data.items()}
 		return None
 	
-	async def delete_by_id(self, keyring: PhasmaDBLocalKeyring, table_name: str, row_id: str, on_error: Callable[[str, PhasmaDBError, Any], None]):
+	async def delete_by_id(self, keyring: PhasmaDBLocalKeyring, table_name: str, row_id: str, on_error: Callable[[str, PhasmaDBError, Any], None]) -> bool:
 		response = await self.__send_command({
 			'cmd': 'delete_by_id',
 			'table': hash_name(keyring, table_name),
@@ -386,6 +391,8 @@ class PhasmaDBConnection:
 		})
 		if not response['success']:
 			on_error("delete_by_id", PhasmaDBError(response['error']), (table_name, row_id))
+			return False
+		return True
 	
 	async def delete_data(self, keyring: PhasmaDBLocalKeyring, table_name: str, query: PhasmaDBQuerySelectClause | SelectAll, on_error: Callable[[str, PhasmaDBError, Any], None]) -> Optional[int]:
 		response = await self.__send_command({
@@ -400,13 +407,15 @@ class PhasmaDBConnection:
 			return deleted_count
 		return None
 	
-	async def drop_table(self, keyring: PhasmaDBLocalKeyring, table_name: str, on_error: Callable[[str, PhasmaDBError, Any], None]):
+	async def drop_table(self, keyring: PhasmaDBLocalKeyring, table_name: str, on_error: Callable[[str, PhasmaDBError, Any], None]) -> bool:
 		response = await self.__send_command({
 			'cmd': 'drop_table',
 			'table': hash_name(keyring, table_name)
 		})
 		if not response['success']:
 			on_error("drop_table", PhasmaDBError(response['error']), (table_name,))
+			return False
+		return True
 	
 	async def close(self):
 		await self.__send_command({'cmd': 'exit'})

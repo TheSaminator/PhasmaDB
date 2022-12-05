@@ -24,15 +24,18 @@ async def main():
 		phasma = phasmadb.PhasmaDBConnection()
 		connection = asyncio.create_task(phasma.connection('http://localhost:8080/phasma-db', phasmadb.PhasmaDBLoginCredential.load("test_private.json"), session))
 		
-		await phasma.create_table(my_keyring, 'officers', {
+		create_table_result = await phasma.create_table(my_keyring, 'officers', {
 			'officer_number': 'unique',
 			'officer_rank': 'sort',
 			'officer_email': 'unique_text',
 			'officer_medals': 'text'
 		}, on_error=print_err)
-		print("Done creating table")
+		if create_table_result:
+			print("Done creating table")
+		else:
+			print("Creating table failed")
 		
-		await phasma.insert_data(my_keyring, 'officers', {
+		insert_data_result = await phasma.insert_data(my_keyring, 'officers', {
 			'row 1': phasmadb.PhasmaDBDataRow({
 				'officer_number': 1914,
 				'officer_rank': 4,
@@ -85,6 +88,11 @@ async def main():
 			})
 		}, on_error=print_err)
 		print("Done inserting data")
+		for (row, success) in insert_data_result.items():
+			if success:
+				print(f"Inserting {row} succeeded")
+			else:
+				print(f"Failed to insert {row}")
 		
 		query_by_id_result = await phasma.query_by_id(my_keyring, 'officers', 'row 4', ['officer_number', 'officer_rank'], on_error=print_err)
 		if query_by_id_result:

@@ -224,9 +224,25 @@ def process_received_query_filter(query: Dict, table: Dict) -> Result[Dict]:
 		return FailureResult(PhasmaDBErrorCode.REQUEST_IMPROPERLY_FORMATTED)
 	
 	if sole_key == 'and':
-		return SuccessResult({'$and': [process_received_query_filter(q, table) for q in query[sole_key]]})
+		subqueries = []
+		for q in query[sole_key]:
+			subquery = process_received_query_filter(q, table)
+			subquery_failure = as_failure(subquery)
+			if subquery_failure:
+				return FailureResult(subquery_failure)
+			subqueries.append(as_success(subquery))
+			
+		return SuccessResult({'$and': subqueries})
 	elif sole_key == 'or':
-		return SuccessResult({'$or': [process_received_query_filter(q, table) for q in query[sole_key]]})
+		subqueries = []
+		for q in query[sole_key]:
+			subquery = process_received_query_filter(q, table)
+			subquery_failure = as_failure(subquery)
+			if subquery_failure:
+				return FailureResult(subquery_failure)
+			subqueries.append(as_success(subquery))
+			
+		return SuccessResult({'$or': subqueries})
 	else:
 		column = str(sole_key)
 		

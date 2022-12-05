@@ -122,14 +122,14 @@ def hash_name(keyring: PhasmaDBLocalKeyring, name: str) -> str:
 	return hashed_name.digest().hex()
 
 
-class PhasmaDBDataRow(NamedTuple):
-	indexed_data: Dict[str, int]
-	extra_data: Any
-
-
 class PhasmaDBTextData(NamedTuple):
 	text: str
 	index_type: Literal['plain', 'prefix', 'word']
+
+
+class PhasmaDBDataRow(NamedTuple):
+	indexed_data: Dict[str, int | str | PhasmaDBTextData]
+	extra_data: Any
 
 
 WORD_REGEX = re.compile("[0-9a-zA-Z]+")

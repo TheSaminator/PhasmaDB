@@ -37,12 +37,19 @@ async def main():
 		else:
 			print("Deleting by text index failed")
 		
-		delete_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_rank') < 3, on_error=print_err)
+		delete_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_rank') < 2, on_error=print_err)
 		if delete_result:
 			print("Done deleting by sort index:")
 			print(delete_result)
 		else:
 			print("Deleting by sort index failed")
+		
+		delete_all_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.SelectAll, on_error=print_err)
+		if delete_all_result:
+			print("Done deleting everything:")
+			print(delete_all_result)
+		else:
+			print("Deleting everything failed")
 		
 		drop_table_result = await phasma.drop_table(my_keyring, 'officers', on_error=print_err)
 		if drop_table_result:

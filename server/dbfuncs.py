@@ -81,7 +81,7 @@ def empty_result_to_json(result: Result[None]) -> Any:
 
 
 def result_to_json(result: Result[T], output_key: str) -> Any:
-	value = {}
+	value = dict()
 	error = as_failure(result)
 	output = as_success(result)
 	if output:
@@ -145,7 +145,7 @@ async def insert_datum(db: AsyncIOMotorDatabase, owner: str, table: Any, datum_i
 			if index_name not in datum['indexed']:
 				datum['indexed'][index_name] = existing_value
 	
-	indexed_data = {}
+	indexed_data = dict()
 	test_unique_indices = []
 	for (index_name, index_type) in table_indices.items():
 		if existing_row is None:
@@ -233,7 +233,7 @@ def get_sole_key(d: Dict) -> Optional[str]:
 
 def process_received_query_filter(query: Dict, table: Dict) -> Result[Dict]:
 	if len(query) == 0:
-		return SuccessResult({})
+		return SuccessResult(dict())
 	
 	sole_key = get_sole_key(query)
 	if not sole_key:
@@ -365,7 +365,7 @@ async def query_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, quer
 	if len(sort_query) > 0:
 		cursor = cursor.sort(sort_query)
 	
-	rows = {}
+	rows = dict()
 	row_limit = None
 	if 'limit' in query.keys() and query['limit'] is not None:
 		row_limit = int(query['limit'])

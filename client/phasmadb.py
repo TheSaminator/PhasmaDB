@@ -274,7 +274,7 @@ def process_sent_query_select_clause(keyring: PhasmaDBLocalKeyring, clause: Phas
 			return {hash_name(keyring, clause.column_name): {clause.leaf_type: keyring.ope_key.encrypt(value)}}
 		else:
 			return {hash_name(keyring, clause.column_name): {clause.leaf_type: hash_name(keyring, value)}}
-	return {}
+	return dict()
 
 
 def process_sent_query(keyring: PhasmaDBLocalKeyring, query: PhasmaDBDataQuery) -> Dict:

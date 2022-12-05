@@ -127,6 +127,8 @@ async def create_table(db: AsyncIOMotorDatabase, owner: str, table_spec: Any) ->
 			index_creations.append(db[collection_name].create_index(f"index.{k}", unique=True))
 		elif v == 'text':
 			index_creations.append(db[collection_name].create_index(f"index.{k}"))
+		elif v == 'unique_text':
+			index_creations.append(db[collection_name].create_index(f"index.{k}", unique=True))
 	
 	await asyncio.gather(*index_creations)
 	

@@ -187,7 +187,6 @@ def process_received_data(keyring: PhasmaDBLocalKeyring, column_hashes: Dict[str
 
 SelectAll = None
 
-
 SelectNodeType = Literal['and', 'or', 'not_and', 'not_or']
 SelectLeafType = Literal['eq', 'neq', 'gt', 'lt', 'gte', 'lte', 'text']
 
@@ -294,38 +293,54 @@ def process_sent_deletion(keyring: PhasmaDBLocalKeyring, query: PhasmaDBQuerySel
 class PhasmaDBConnection:
 	def __init__(self):
 		self._commands = Queue()
+		self._exception = None
 	
 	async def connection(self, server_url: str, credential: PhasmaDBLoginCredential, session: aiohttp.ClientSession) -> None:
 		"""
 		Should be run in parallel with the code that uses the database, using asyncio.create_task
 		"""
 		
-		async with session.ws_connect(server_url) as ws:
-			await ws.send_json({'username': credential.username})
-			
-			challenge = await read_json(ws)
-			if not challenge['challenge']:
-				raise PhasmaDBError(challenge['error'])
-			token = credential.private_key.decrypt(bytes.fromhex(challenge['challenge']), rsa_padding.PKCS1v15())
-			await ws.send_json({'response': token.hex()})
-			
-			sent_exit = False
-			
-			while (not ws.closed) and (not sent_exit):
-				(command, future) = await self._commands.get()
+		current_future = None
+		try:
+			async with session.ws_connect(server_url) as ws:
+				await ws.send_json({'username': credential.username})
 				
-				if command['cmd'] == 'exit':
-					sent_exit = True
+				challenge = await read_json(ws)
+				if not challenge['challenge']:
+					raise PhasmaDBError(challenge['error'])
+				token = credential.private_key.decrypt(bytes.fromhex(challenge['challenge']), rsa_padding.PKCS1v15())
+				await ws.send_json({'response': token.hex()})
 				
-				await ws.send_json(command)
-				response = await read_json(ws)
-				if not response:
-					break
+				sent_exit = False
 				
-				future.set_result(response)
-				self._commands.task_done()
+				while (not ws.closed) and (not sent_exit):
+					(command, future) = await self._commands.get()
+					current_future = future
+					
+					if command['cmd'] == 'exit':
+						sent_exit = True
+					
+					await ws.send_json(command)
+					response = await read_json(ws)
+					if not response:
+						break
+					
+					future.set_result(response)
+					current_future = None
+					
+					self._commands.task_done()
+		except aiohttp.client.ClientConnectionError as ex:
+			self._exception = ex
+			if current_future is not None:
+				current_future.set_exception(ex)
+			while not self._commands.empty():
+				(_, future) = await self._commands.get()
+				future.set_exception(ex)
 	
 	async def __send_command(self, command: Any) -> Any:
+		if self._exception is not None:
+			raise self._exception
+		
 		future = Future()
 		await self._commands.put((command, future))
 		return await future

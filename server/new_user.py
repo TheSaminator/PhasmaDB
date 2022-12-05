@@ -24,7 +24,7 @@ def generate_user(username: str, private_key_file: TextIO):
 	with open(f'public_keys/{username}.pem', 'wb') as public_key_file:
 		public_key_file.write(rsa_public_key.public_bytes(Encoding.PEM, PublicFormat.PKCS1))
 	
-	privkey = {'username': username, 'private_key': base64.b64encode(rsa_private_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())).decode('ascii')}
+	privkey = {'username': username, 'private_key': rsa_private_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('ascii')}
 	private_key_file.write(json.dumps(privkey))
 	private_key_file.close()
 	

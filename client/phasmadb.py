@@ -27,7 +27,7 @@ class PhasmaDBLoginCredential(NamedTuple):
 		with open(from_file) as file:
 			credential = json.load(file)
 			username = credential['username']
-			private_key = load_pem_private_key(base64.b64decode(credential['private_key']), None)
+			private_key = load_pem_private_key(credential['private_key'].encode('ascii'), None)
 			return PhasmaDBLoginCredential(username, private_key)
 
 

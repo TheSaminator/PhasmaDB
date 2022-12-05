@@ -132,6 +132,16 @@ async def main():
 		else:
 			print("Querying by id failed")
 		
+		query_all_result = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
+			select=phasmadb.SelectAll,
+			sort=[('officer_rank', 'desc')]
+		), ['officer_number', 'officer_rank'], on_error=print_err)
+		if query_all_result:
+			print("Done querying all rows:")
+			print(repr(query_all_result))
+		else:
+			print("Querying all rows failed")
+		
 		query_result_1 = await phasma.query_data(my_keyring, 'officers', phasmadb.PhasmaDBDataQuery(
 			select=phasmadb.Column('officer_email') == 'dgsf@zoomer.union',
 			sort=[]

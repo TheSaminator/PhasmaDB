@@ -1,16 +1,15 @@
-import asyncio
 import base64
 import hashlib
 import json
 import os
 import random
 import re
-from asyncio import Queue
+from asyncio import Future, Queue
 from typing import NamedTuple, Optional, Any, Literal, Dict, Callable, List
 
 import aiohttp
-from cryptography.hazmat.primitives.asymmetric import rsa, padding as rsa_padding
 from cryptography.hazmat.primitives import padding as aes_padding
+from cryptography.hazmat.primitives.asymmetric import rsa, padding as rsa_padding
 from cryptography.hazmat.primitives.ciphers import Cipher
 from cryptography.hazmat.primitives.ciphers.algorithms import AES
 from cryptography.hazmat.primitives.ciphers.modes import CBC
@@ -327,7 +326,7 @@ class PhasmaDBConnection:
 				self._commands.task_done()
 	
 	async def __send_command(self, command: Any) -> Any:
-		future = asyncio.Future()
+		future = Future()
 		await self._commands.put((command, future))
 		return await future
 	

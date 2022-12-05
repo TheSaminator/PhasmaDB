@@ -138,15 +138,18 @@ async def insert_datum(db: AsyncIOMotorDatabase, owner: str, table: Any, datum_i
 	collection_name = f"{owner}_{table['name']}"
 	table_indices = table['indices']
 	
-	any_with_id = await db[collection_name].find_one(datum_id)
-	if any_with_id:
-		return datum_id, FailureResult(int(PhasmaDBErrorCode.ROW_SAME_ID_ALREADY_EXISTS))
+	existing_row = await db[collection_name].find_one({'row_id': datum_id})
+	if existing_row:
+		for (index_name, existing_value) in existing_row['index'].items():
+			if index_name not in datum['indexed']:
+				datum['indexed'][index_name] = existing_value
 	
 	indexed_data = {}
 	test_unique_indices = []
 	for (index_name, index_type) in table_indices.items():
-		if index_name not in datum['indexed'].keys():
-			return datum_id, FailureResult(int(PhasmaDBErrorCode.ROW_LACKS_SOME_INDEXED_VALUES))
+		if existing_row is None:
+			if index_name not in datum['indexed'].keys():
+				return datum_id, FailureResult(int(PhasmaDBErrorCode.ROW_LACKS_SOME_INDEXED_VALUES))
 		
 		if index_type == 'sort' or index_type == 'unique':
 			row_index_value = int(datum['indexed'][index_name])
@@ -166,10 +169,19 @@ async def insert_datum(db: AsyncIOMotorDatabase, owner: str, table: Any, datum_i
 		return datum_id, FailureResult(int(PhasmaDBErrorCode.ROW_HAS_EXTRA_INDEXED_VALUES))
 	
 	test_unique_index_results = await asyncio.gather(*test_unique_indices)
-	if any((r is not None) for r in test_unique_index_results):
+	if any((r is not None and r['row_id'] != datum_id) for r in test_unique_index_results):
 		return datum_id, FailureResult(int(PhasmaDBErrorCode.ROW_SAME_UNIQUES_ALREADY_EXISTS))
 	
-	await db[collection_name].insert_one({'_id': new_db_id(), 'row_id': datum_id, 'index': indexed_data, 'extra': str(datum['extra'])})
+	if existing_row:
+		await db[collection_name].replace_one(
+			filter={'row_id': datum_id},
+			replacement={'_id': existing_row['_id'], 'row_id': datum_id, 'index': indexed_data, 'extra': str(datum['extra'])},
+			upsert=True
+		)
+	else:
+		await db[collection_name].insert_one(
+			document={'_id': new_db_id(), 'row_id': datum_id, 'index': indexed_data, 'extra': str(datum['extra'])}
+		)
 	return datum_id, SuccessResult(None)
 
 
@@ -183,7 +195,7 @@ async def insert_data(db: AsyncIOMotorDatabase, owner: str, table_name: str, dat
 	
 	insertions = []
 	for (datum_id, datum) in data.items():
-		insertions.append(insert_datum(db, owner, table, datum_id, datum))
+		insertions.append(asyncio.create_task(insert_datum(db, owner, table, datum_id, datum)))
 	
 	return {k: v for (k, v) in await asyncio.gather(*insertions)}
 

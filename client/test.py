@@ -79,20 +79,51 @@ async def main():
 			'row 5': phasmadb.PhasmaDBDataRow({
 				'officer_number': 8085,
 				'officer_rank': 1,
-				'officer_email': "dafauks@zoomer.union",
+				'officer_email': "dafaux@zoomer.union",
 				'officer_medals': phasmadb.PhasmaDBTextData("Weeb FalloutNewVegas", 'word')
+			}, {
+				'officer_name': "Daphaux Astakidas",
+				'officer_email': "dafaux@zoomer.union",
+				'officer_medals': "Weeb FalloutNewVegas"
+			})
+		}, on_error=print_err)
+		print("Done inserting data:")
+		for (row, success) in insert_data_result.items():
+			if success:
+				print(f"Inserting {row} succeeded")
+			else:
+				print(f"Failed to insert {row}")
+		
+		update_data_result = await phasma.insert_data(my_keyring, 'officers', {
+			'row 5': phasmadb.PhasmaDBDataRow({
+				'officer_email': "dafauks@zoomer.union",
 			}, {
 				'officer_name': "Daphaux Astakidas",
 				'officer_email': "dafauks@zoomer.union",
 				'officer_medals': "Weeb FalloutNewVegas"
 			})
 		}, on_error=print_err)
-		print("Done inserting data")
-		for (row, success) in insert_data_result.items():
-			if success:
-				print(f"Inserting {row} succeeded")
-			else:
-				print(f"Failed to insert {row}")
+		if update_data_result['row 5']:
+			print("Done updating row 5")
+		else:
+			print("Updating row 5 failed")
+		
+		insert_invalid_data_result = await phasma.insert_data(my_keyring, 'officers', {
+			'row 6': phasmadb.PhasmaDBDataRow({
+				'officer_number': 2247,
+				'officer_rank': 2,
+				'officer_email': "laniustrolling@zoomer.union",
+				'officer_medals': phasmadb.PhasmaDBTextData("FalloutNewVegas Warhammer40k MechyrdiaLore", 'word')
+			}, {
+				'officer_name': "Legatus Lanius Trollator",
+				'officer_email': "laniustrolling@zoomer.union",
+				'officer_medals': "FalloutNewVegas Warhammer40k MechyrdiaLore"
+			})
+		}, on_error=print_err)
+		if insert_invalid_data_result['row 6']:
+			print("Inserting invalid data succeeded...somehow?")
+		else:
+			print("Inserting invalid data failed, as it should")
 		
 		query_by_id_result = await phasma.query_by_id(my_keyring, 'officers', 'row 4', ['officer_number', 'officer_rank'], on_error=print_err)
 		if query_by_id_result:

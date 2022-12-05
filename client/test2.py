@@ -25,6 +25,7 @@ async def main():
 		connection = asyncio.create_task(phasma.connection('http://localhost:8080/phasma-db', phasmadb.PhasmaDBLoginCredential.load("test_private.json"), session))
 		
 		await phasma.delete_by_id(my_keyring, 'officers', 'row 1', on_error=print_err)
+		print("Done deleting by id")
 		
 		delete_by_text_result = await phasma.delete_data(my_keyring, 'officers', phasmadb.Column('officer_email') == "dgsf@zoomer.union", on_error=print_err)
 		if delete_by_text_result:

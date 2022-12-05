@@ -72,6 +72,16 @@ async def main():
 				'officer_name': "Lucius Denallius Valca",
 				'officer_email': "fortniteluvr69@zoomer.union",
 				'officer_medals': "Papism FalloutNewVegas"
+			}),
+			'row 5': phasmadb.PhasmaDBDataRow({
+				'officer_number': 8085,
+				'officer_rank': 1,
+				'officer_email': "dafauks@zoomer.union",
+				'officer_medals': phasmadb.PhasmaDBTextData("Weeb FalloutNewVegas", 'word')
+			}, {
+				'officer_name': "Daphaux Astakidas",
+				'officer_email': "dafauks@zoomer.union",
+				'officer_medals': "Weeb FalloutNewVegas"
 			})
 		}, on_error=print_err)
 		print("Done inserting data")
